@@ -1,0 +1,17 @@
+x,y,corr
+L_damp,lambda_over_zeta,1.0000000000000002
+q_lambda,Nosc,-0.8584995083772982
+Rmax_kpc,lambda0_kpc,0.8517488338455297
+q_Ldamp,lambda_over_zeta,0.7413188914570974
+L_damp,q_Ldamp,0.7413188914570974
+Rmax_kpc,V_max_fixed,0.7035953112486873
+V_max_fixed,q_Rc,-0.7017892819750021
+Rmax_kpc,q_Rc,-0.613197602508595
+V_max_fixed,lambda0_kpc,0.5819097213304041
+zeta,q_Ldamp,-0.5767455897503516
+Rc_kpc,q_Rc,0.562224634217054
+lambda0_kpc,q_Rc,-0.511083213783114
+zeta,lambda_over_zeta,-0.4561796558428752
+zeta,L_damp,-0.4561796558428751
+zeta,q_Rc,-0.3547581553479992
+V_max_fixed,Rc_kpc,-0.3534171632403747
