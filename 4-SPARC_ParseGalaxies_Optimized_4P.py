@@ -4,16 +4,15 @@
 """
 SPARC_ParseGalaxies_4P_FixedLambda.py
 
-Modèle 4 paramètres avec loi d'échelle:
-    lambda0 = 1.3 * Rmax   (Rmax = max(R) pour la galaxie) provient de l'analyse SPARC précédente où C=1.324 et Beta=0.99. 
-    Nous avons utilisé une valeur arrondie de 1.3 pour simplifier.
+Modele 4 parametres avec loi d'echelle:
+    lambda0 = 1.3 * RHI   (RHI = rayon HI a 1 Msun/pc2, Table1 SPARC)
 
-Paramètres libres (4):
+Parametres libres (4):
     A, zeta, phi0, Rc
-Paramètres fixés:
-    Vmax fixé par plateau (médiane des derniers points)
+Parametres fixes:
+    Vmax fixe par plateau (mediane des derniers points)
     alpha = 0 (phase simple)
-    lambda0 = 1.3 Rmax
+    lambda0 = 1.3 * RHI
 
 Sorties:
   ./4-SPARC Params Parsing Results 4P FixedLambda/
@@ -38,6 +37,31 @@ MIN_POINTS_FIT = 10
 
 PLATEAU_FRAC_LAST = 0.25
 PLATEAU_MIN_POINTS = 4
+
+
+# =========================
+# Parse Table1 (pour RHI)
+# =========================
+def parse_table1_rhi(filepath):
+    """Extrait RHI (bytes 82-86) par galaxie depuis Table1."""
+    rhi_dict = {}
+    with open(filepath, "r", errors="ignore") as f:
+        lines = f.readlines()
+    data_start = 0
+    for i, line in enumerate(lines):
+        if line.startswith("---"):
+            data_start = i + 1
+    for line in lines[data_start:]:
+        if len(line) < 86:
+            continue
+        try:
+            name = line[0:11].strip()
+            rhi = float(line[81:86].strip())
+            if rhi > 0:
+                rhi_dict[name] = rhi
+        except (ValueError, IndexError):
+            continue
+    return rhi_dict
 
 
 # =========================
@@ -114,7 +138,7 @@ def estimate_Vmax_plateau(R, Vobs, frac_last=PLATEAU_FRAC_LAST, min_points=PLATE
 
 
 # =========================
-# Modèle 4P (lambda0 fixé)
+# Modele 4P (lambda0 fixe)
 # =========================
 def model_V_4p(R, Vmax, A, zeta, phi0, Rc, lambda0):
     R = np.asarray(R, dtype=float)
@@ -140,7 +164,7 @@ def model_V_4p(R, Vmax, A, zeta, phi0, Rc, lambda0):
 
 
 # =========================
-# Coût
+# Cout
 # =========================
 def chi2_reduced_4p(params, R, Vobs, e, Vmax, lambda0):
     A, zeta, phi0, Rc = params
@@ -168,7 +192,7 @@ def fit_galaxy_4p(R, Vobs, e, Vmax, lambda0, seed=42):
         (0.05, max(0.7 * Rmax, 0.06))  # Rc
     ]
 
-    # adaptatif léger
+    # adaptatif leger
     n = len(R)
     if n < 18:
         maxiter, popsize = 140, 14
@@ -221,7 +245,7 @@ def fit_galaxy_4p(R, Vobs, e, Vmax, lambda0, seed=42):
 # =========================
 # Plot
 # =========================
-def plot_fit(name, R, Vobs, e, fit, outdir):
+def plot_fit(name, R, Vobs, e, fit, RHI, outdir):
     Vmax = fit["V_max_fixed"]
     lambda0 = fit["lambda0_fixed"]
 
@@ -234,11 +258,11 @@ def plot_fit(name, R, Vobs, e, fit, outdir):
 
     plt.figure(figsize=(7, 4.5))
     plt.errorbar(R, Vobs, yerr=e, fmt="o", markersize=4, capsize=2, label="Observations")
-    plt.plot(R_dense, V_dense, linewidth=2, label="Modèle 4P (lambda0=1.3 Rmax)")
+    plt.plot(R_dense, V_dense, linewidth=2, label="Modele 4P (lambda0=1.3*RHI)")
 
     plt.title(
-        f"{name} | RMSE={fit['rmse']:.2f} km/s | R²={fit['R_squared']:.4f}\n"
-        f"lambda0={lambda0:.2f} kpc | zeta={fit['zeta']:.3f} | A={fit['A']:.3f}"
+        f"{name} | RMSE={fit['rmse']:.2f} km/s | R2={fit['R_squared']:.4f}\n"
+        f"RHI={RHI:.2f} kpc | lambda0={lambda0:.2f} kpc | zeta={fit['zeta']:.3f} | A={fit['A']:.3f}"
     )
     plt.xlabel("R (kpc)")
     plt.ylabel("V (km/s)")
@@ -257,10 +281,13 @@ def plot_fit(name, R, Vobs, e, fit, outdir):
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
-    # Input (même convention que tes scripts)
+    # Input
+    table1_path = os.path.join(script_dir, "Table1 SPARC Galaxy Sample.mrt")
     table2_path = os.path.join(script_dir, "Table2 SPARC Masse Models.mrt")
-    if not os.path.exists(table2_path):
-        raise FileNotFoundError(f"Fichier introuvable: {table2_path}")
+
+    for p in [table1_path, table2_path]:
+        if not os.path.exists(p):
+            raise FileNotFoundError(f"Fichier introuvable: {p}")
 
     out_dir = os.path.join(script_dir, "4-SPARC Params Parsing Results 4P FixedLambda")
     os.makedirs(out_dir, exist_ok=True)
@@ -268,12 +295,14 @@ def main():
     out_json = os.path.join(out_dir, "SPARC_fit_results_4p_fixedlambda.json")
     out_csv  = os.path.join(out_dir, "SPARC_fit_summary_4p_fixedlambda.csv")
 
+    # Parse
+    rhi_dict = parse_table1_rhi(table1_path)
     galaxies = parse_table2(table2_path)
     names = sorted(galaxies.keys())
 
     print("=" * 90)
-    print("SPARC FIT 4 PARAMÈTRES: lambda0 = 1.3 Rmax (fixé) | Vmax fixé plateau")
-    print(f"Galaxies trouvées: {len(names)}")
+    print("SPARC FIT 4 PARAMETRES: lambda0 = 1.3 * RHI (fixe) | Vmax fixe plateau")
+    print(f"Galaxies Table2: {len(names)} | RHI disponible: {len(rhi_dict)}")
     print("=" * 90)
 
     results = {}
@@ -290,29 +319,35 @@ def main():
             print(f"[{i:3d}/{len(names)}] {name:12s} - SKIP (n={len(R)} < {MIN_POINTS_FIT})")
             continue
 
+        if name not in rhi_dict:
+            print(f"[{i:3d}/{len(names)}] {name:12s} - SKIP (RHI non disponible)")
+            continue
+
         Vmax = estimate_Vmax_plateau(R, Vobs)
-        Rmax = float(np.max(R))
-        lambda0 = LAMBDA_SCALE * Rmax
+        RHI = rhi_dict[name]
+        lambda0 = LAMBDA_SCALE * RHI
 
         try:
             fit = fit_galaxy_4p(R, Vobs, e, Vmax, lambda0, seed=42)
             fit["D"] = float(data["D"])
+            fit["RHI_kpc"] = float(RHI)
             results[name] = fit
             n_fit += 1
 
             status = "OK" if fit["success"] else "WARN"
             print(f"[{i:3d}/{len(names)}] {name:12s} - {status}  "
-                  f"chi2={fit['chi2_reduced']:.4f}  R²={fit['R_squared']:.4f}  "
-                  f"RMSE={fit['rmse']:.2f}  lambda0={fit['lambda0_fixed']:.2f}  "
+                  f"chi2={fit['chi2_reduced']:.4f}  R2={fit['R_squared']:.4f}  "
+                  f"RMSE={fit['rmse']:.2f}  RHI={RHI:.2f}  lambda0={fit['lambda0_fixed']:.2f}  "
                   f"Nosc~{fit['Nosc_Rmax_over_lambda0']:.2f}")
 
-            plot_fit(name, R, Vobs, e, fit, out_dir)
+            plot_fit(name, R, Vobs, e, fit, RHI, out_dir)
 
             rows.append({
                 "name": name,
                 "D_Mpc": fit["D"],
                 "n_points": fit["n_points"],
                 "Rmax_kpc": fit["Rmax_kpc"],
+                "RHI_kpc": fit["RHI_kpc"],
                 "lambda0_kpc_fixed": fit["lambda0_fixed"],
                 "Nosc_Rmax_over_lambda0": fit["Nosc_Rmax_over_lambda0"],
                 "chi2_reduced": fit["chi2_reduced"],
@@ -340,19 +375,19 @@ def main():
 
     # stats
     print("\n" + "=" * 90)
-    print("STATISTIQUES GLOBALES (4P fixed lambda0)")
+    print("STATISTIQUES GLOBALES (4P fixed lambda0 = 1.3*RHI)")
     print("=" * 90)
 
     if rows:
         rmse = np.array([r["RMSE_km_s"] for r in rows], float)
         r2 = np.array([r["R_squared"] for r in rows], float)
-        print(f"Galaxies fittées: {n_fit}")
-        print(f"RMSE moyen:   {rmse.mean():.2f} ± {rmse.std():.2f} km/s")
-        print(f"RMSE médian:  {np.median(rmse):.2f} km/s")
-        print(f"R² moyen:     {r2.mean():.4f} ± {r2.std():.4f}")
-        print(f"R² médian:    {np.median(r2):.4f}")
+        print(f"Galaxies fittees: {n_fit}")
+        print(f"RMSE moyen:   {rmse.mean():.2f} +/- {rmse.std():.2f} km/s")
+        print(f"RMSE median:  {np.median(rmse):.2f} km/s")
+        print(f"R2 moyen:     {r2.mean():.4f} +/- {r2.std():.4f}")
+        print(f"R2 median:    {np.median(r2):.4f}")
     else:
-        print("Aucun fit réalisé.")
+        print("Aucun fit realise.")
 
     print("\nSorties:", out_dir)
     print(" JSON:", out_json)
